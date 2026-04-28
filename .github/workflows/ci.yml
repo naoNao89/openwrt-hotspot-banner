@@ -102,7 +102,18 @@ jobs:
       - name: Install QEMU tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y expect openssh-client qemu-system-x86
+          sudo apt-get install -y musl-tools openssh-client qemu-system-x86
+
+      - name: Install Rust for QEMU binary
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build QEMU runtime binary
+        run: cargo build --target x86_64-unknown-linux-musl --release
 
       - name: Boot OpenWrt and run smoke checks
         run: ./scripts/qemu-openwrt-smoke.sh
