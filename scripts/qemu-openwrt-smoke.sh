@@ -99,7 +99,7 @@ qemu-system-x86_64 \
 QEMU_PID=$!
 
 SSH_BASE="ssh -p $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@127.0.0.1"
-SCP_BASE="scp -P $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SCP_BASE="scp -O -P $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 CONNECTED=0
 for _ in $(seq 1 60); do
