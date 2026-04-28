@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - dev/**
   workflow_dispatch:
 
 permissions:
@@ -51,6 +52,42 @@ jobs:
 
       - name: Build CI image
         run: make ci-docker
+
+  openwrt-rootfs:
+    name: OpenWrt rootfs ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - x86_64-22.03.7
+          - x86_64-23.05.6
+          - x86_64-24.10.6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Smoke test scripts in OpenWrt rootfs
+        run: |
+          docker run --rm \
+            -v "$PWD:/work:ro" \
+            -w /work \
+            openwrt/rootfs:${{ matrix.version }} \
+            /bin/ash -c '
+              cat /etc/openwrt_release
+              ash -n deploy.sh
+              ash -n openwrt-config/harden-router-services.sh
+              ash -n openwrt-config/hotspot-firewall.sh
+              ash -n openwrt-config/iptables-captive.sh
+              ash -n openwrt-config/setup-router.sh
+              ash -n openwrt-config/uci-guest-setup.sh
+              ash -n scripts/check-shell.sh
+              ash -n scripts/test-router.sh
+              ash -n scripts/live-queue-e2e.sh
+              RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh
+            '
 
   repo-hygiene:
     name: Repo hygiene
