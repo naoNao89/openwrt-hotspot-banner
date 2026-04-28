@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+env:
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  native:
+    name: Native CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run CI checks
+        run: make ci
+
+  docker:
+    name: Docker CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build CI image
+        run: make ci-docker
+
+  repo-hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify env template policy
+        run: |
+          test -f .env.example
+          git check-ignore -q .env
+          ! git ls-files --error-unmatch .env >/dev/null 2>&1
+          grep -Fqx '.env' .dockerignore
+          grep -Fqx '.env.*' .dockerignore
+
+      - name: Ensure live router scripts are guarded
+        run: |
+          grep -q 'ROUTER_IP="${ROUTER_IP:-}"' deploy.sh
+          grep -q 'ROUTER_HOST="${ROUTER_HOST:-}"' scripts/test-router.sh
+          grep -q 'RUN_LIVE_QUEUE_E2E' scripts/live-queue-e2e.sh
+          grep -q 'SKIP live queue E2E is guarded' scripts/live-queue-e2e.sh
+
+      - name: Check README fences
+        run: python3 -c "from pathlib import Path; text = Path('README.md').read_text(); assert text.count('```') % 2 == 0"

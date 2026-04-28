@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.bak
+*.orig
+coverage/
+lcov.info
+*.swp
+*.swo
+*~
+.DS_Store

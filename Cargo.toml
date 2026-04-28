@@ -1,0 +1,20 @@
+[package]
+name = "openwrt-hotspot-banner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

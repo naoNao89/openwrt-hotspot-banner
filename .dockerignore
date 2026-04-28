@@ -1,0 +1,13 @@
+target/
+.git/
+.github/
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.bak
+*.orig
+coverage/
+lcov.info
+.DS_Store
