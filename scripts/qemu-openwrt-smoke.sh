@@ -78,6 +78,15 @@ sudo mount "${LOOP_DEV}p2" "$MOUNT_DIR"
 sudo mkdir -p "$MOUNT_DIR/etc/dropbear"
 printf '%s\n' "$SSH_PUBLIC_KEY" | sudo tee "$MOUNT_DIR/etc/dropbear/authorized_keys" >/dev/null
 sudo chmod 600 "$MOUNT_DIR/etc/dropbear/authorized_keys"
+sudo tee -a "$MOUNT_DIR/etc/config/firewall" >/dev/null <<'FIREWALL'
+
+config rule
+	option name 'Allow-CI-SSH'
+	option src 'wan'
+	option proto 'tcp'
+	option dest_port '22'
+	option target 'ACCEPT'
+FIREWALL
 sudo umount "$MOUNT_DIR"
 
 qemu-system-x86_64 \
