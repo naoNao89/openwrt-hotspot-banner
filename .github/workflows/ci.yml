@@ -90,9 +90,21 @@ jobs:
             '
 
   qemu-openwrt:
-    name: QEMU OpenWrt smoke
+    name: QEMU OpenWrt smoke ${{ matrix.profile }}
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/dev/')
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/dev/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: home-router-150mb
+            memory_mb: 150
+          - profile: router-250mb
+            memory_mb: 250
+          - profile: router-1gb
+            memory_mb: 1024
+          - profile: router-4gb
+            memory_mb: 4096
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -116,6 +128,8 @@ jobs:
         run: cargo build --target x86_64-unknown-linux-musl --release
 
       - name: Boot OpenWrt and run smoke checks
+        env:
+          QEMU_MEMORY_MB: ${{ matrix.memory_mb }}
         run: ./scripts/qemu-openwrt-smoke.sh
 
   repo-hygiene:
