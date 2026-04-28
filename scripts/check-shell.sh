@@ -28,6 +28,7 @@ check_script openwrt-config/uci-guest-setup.sh
 check_script openwrt-config/setup-router.sh
 check_script scripts/test-router.sh
 check_script scripts/live-queue-e2e.sh
+check_script scripts/qemu-openwrt-smoke.sh
 
 if [ "$STATUS" -eq 0 ]; then
     echo 'All shell scripts OK'
