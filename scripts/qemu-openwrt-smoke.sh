@@ -39,6 +39,14 @@ require_command ssh-keygen
 require_command sudo
 require_command umount
 
+group_start() {
+    echo "::group::$1"
+}
+
+group_end() {
+    echo "::endgroup::"
+}
+
 if [ ! -f "$APP_BINARY_PATH" ]; then
     echo "Missing QEMU app binary: $APP_BINARY_PATH"
     exit 2
@@ -131,12 +139,19 @@ run_hey() {
     url="$4"
     output="$BENCHMARK_DIR/hey-${name}.txt"
 
+    group_start "HTTP benchmark ${name}"
+    echo "url=$url"
+    echo "requests=$requests"
+    echo "concurrency=$concurrency"
+    echo "output=$output"
+
     set +e
     hey -n "$requests" -c "$concurrency" "$url" > "$output" 2>&1
     status=$?
     set -e
 
     cat "$output"
+    group_end
     if [ "$status" -ne 0 ]; then
         exit "$status"
     fi
@@ -159,9 +174,26 @@ if [ "$CONNECTED" -ne 1 ]; then
     exit 1
 fi
 
+group_start "QEMU benchmark configuration"
+echo "openwrt_version=$OPENWRT_VERSION"
+echo "openwrt_target=$OPENWRT_TARGET"
+echo "qemu_memory_mb=$QEMU_MEMORY_MB"
+echo "ssh_host_port=$SSH_PORT"
+echo "app_host_port=$APP_HOST_PORT"
+echo "benchmark_dir=$BENCHMARK_DIR"
+echo "app_binary_path=$APP_BINARY_PATH"
+echo "hey_health_requests=$HEY_HEALTH_REQUESTS"
+echo "hey_health_concurrency=$HEY_HEALTH_CONCURRENCY"
+echo "hey_page_requests=$HEY_PAGE_REQUESTS"
+echo "hey_page_concurrency=$HEY_PAGE_CONCURRENCY"
+group_end
+
+group_start "OpenWrt boot state"
 $SSH_BASE 'cat /etc/openwrt_release'
 $SSH_BASE 'free'
 $SSH_BASE 'command -v uci; command -v ip; command -v logger; command -v wget'
+group_end
+
 $SSH_BASE 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'
 $SCP_BASE -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/
 $SCP_BASE "$APP_BINARY_PATH" root@127.0.0.1:/tmp/hotspot-ci/hotspot-fas
@@ -178,10 +210,14 @@ $SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0
     $SSH_BASE 'free'
     echo "process_before:"
     $SSH_BASE "ps w | grep '[h]otspot-fas'"
-} > "$BENCHMARK_DIR/openwrt-before.txt"
+} | tee "$BENCHMARK_DIR/openwrt-before.txt"
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -q "Connect & Start Internet"'
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -q "Connect & Start Internet"'
+group_start "In-guest endpoint stress"
+echo "paths=/health / /generate_204 /hotspot-detect.html /ncsi.txt /connecttest.txt"
+echo "requests_per_path=100"
 $SSH_BASE 'for path in /health / /generate_204 /hotspot-detect.html /ncsi.txt /connecttest.txt; do i=0; while [ "$i" -lt 100 ]; do wget -T 3 -qO- "http://127.0.0.1:8080${path}" >/dev/null; i=$((i + 1)); done; done'
+group_end
 run_hey health "$HEY_HEALTH_REQUESTS" "$HEY_HEALTH_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/health"
 run_hey root "$HEY_PAGE_REQUESTS" "$HEY_PAGE_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/"
 run_hey generate-204 "$HEY_PAGE_REQUESTS" "$HEY_PAGE_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/generate_204"
@@ -193,5 +229,5 @@ $SSH_BASE 'test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = o
     $SSH_BASE "ps w | grep '[h]otspot-fas'"
     echo "dmesg_health_scan:"
     $SSH_BASE "dmesg | grep -Ei 'oom|panic|segfault|killed process' || true"
-} > "$BENCHMARK_DIR/openwrt-after.txt"
+} | tee "$BENCHMARK_DIR/openwrt-after.txt"
 $SSH_BASE "! dmesg | grep -Ei 'oom|panic|segfault|killed process'"
