@@ -10,8 +10,14 @@ OPENWRT_IMAGE_SHA256="${OPENWRT_IMAGE_SHA256:-23dc6904ede514e37e9938604c9951a060
 OPENWRT_BASE_URL="${OPENWRT_BASE_URL:-https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${OPENWRT_TARGET}}"
 WORK_DIR="${QEMU_WORK_DIR:-.qemu-openwrt}"
 SSH_PORT="${QEMU_SSH_PORT:-2222}"
+APP_HOST_PORT="${QEMU_APP_HOST_PORT:-18080}"
 QEMU_MEMORY_MB="${QEMU_MEMORY_MB:-256}"
 APP_BINARY_PATH="${QEMU_APP_BINARY:-target/x86_64-unknown-linux-musl/release/openwrt-hotspot-banner}"
+BENCHMARK_DIR="${QEMU_BENCHMARK_DIR:-$WORK_DIR/benchmarks}"
+HEY_HEALTH_REQUESTS="${QEMU_HEY_HEALTH_REQUESTS:-1000}"
+HEY_HEALTH_CONCURRENCY="${QEMU_HEY_HEALTH_CONCURRENCY:-25}"
+HEY_PAGE_REQUESTS="${QEMU_HEY_PAGE_REQUESTS:-500}"
+HEY_PAGE_CONCURRENCY="${QEMU_HEY_PAGE_CONCURRENCY:-10}"
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -22,6 +28,7 @@ require_command() {
 
 require_command curl
 require_command gzip
+require_command hey
 require_command losetup
 require_command mount
 require_command qemu-system-x86_64
@@ -38,6 +45,8 @@ if [ ! -f "$APP_BINARY_PATH" ]; then
 fi
 
 mkdir -p "$WORK_DIR"
+rm -rf "$BENCHMARK_DIR"
+mkdir -p "$BENCHMARK_DIR"
 
 IMAGE_GZ_PATH="$WORK_DIR/$OPENWRT_IMAGE_GZ"
 IMAGE_PATH="$WORK_DIR/${OPENWRT_IMAGE_PREFIX}.img"
@@ -93,6 +102,13 @@ config rule
 	option proto 'tcp'
 	option dest_port '22'
 	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-CI-App-Benchmark'
+	option src 'wan'
+	option proto 'tcp'
+	option dest_port '8080'
+	option target 'ACCEPT'
 FIREWALL
 sudo umount "$MOUNT_DIR"
 
@@ -102,11 +118,33 @@ qemu-system-x86_64 \
     -no-reboot \
     -drive file="$IMAGE_PATH",format=raw,if=virtio \
     -nic user,model=virtio-net-pci \
-    -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22" &
+    -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22,hostfwd=tcp:127.0.0.1:${APP_HOST_PORT}-:8080" &
 QEMU_PID=$!
 
 SSH_BASE="ssh -p $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@127.0.0.1"
 SCP_BASE="scp -O -P $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+run_hey() {
+    name="$1"
+    requests="$2"
+    concurrency="$3"
+    url="$4"
+    output="$BENCHMARK_DIR/hey-${name}.txt"
+
+    set +e
+    hey -n "$requests" -c "$concurrency" "$url" > "$output" 2>&1
+    status=$?
+    set -e
+
+    cat "$output"
+    if [ "$status" -ne 0 ]; then
+        exit "$status"
+    fi
+
+    if grep -q 'Error distribution:' "$output"; then
+        exit 1
+    fi
+}
 
 CONNECTED=0
 for _ in $(seq 1 60); do
@@ -131,9 +169,29 @@ $SSH_BASE 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harde
 $SSH_BASE 'chmod +x /tmp/hotspot-ci/hotspot-fas'
 $SSH_BASE 'PORT=8080 SESSION_MINUTES=1 DISCONNECT_GRACE_SECONDS=1 QUEUE_RETRY_SECONDS=1 MAX_ACTIVE_SESSIONS=30 GUEST_IFACE=br-lan /tmp/hotspot-ci/hotspot-fas >/tmp/hotspot-ci/hotspot-fas.log 2>&1 & echo $! >/tmp/hotspot-ci/hotspot-fas.pid'
 $SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok && exit 0; sleep 1; done; cat /tmp/hotspot-ci/hotspot-fas.log; exit 1'
+{
+    echo "profile_memory_mb=$QEMU_MEMORY_MB"
+    echo "app_host_url=http://127.0.0.1:${APP_HOST_PORT}"
+    echo "openwrt_release:"
+    $SSH_BASE 'cat /etc/openwrt_release'
+    echo "free_before:"
+    $SSH_BASE 'free'
+    echo "process_before:"
+    $SSH_BASE "ps w | grep '[h]otspot-fas'"
+} > "$BENCHMARK_DIR/openwrt-before.txt"
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -q "Connect & Start Internet"'
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -q "Connect & Start Internet"'
 $SSH_BASE 'for path in /health / /generate_204 /hotspot-detect.html /ncsi.txt /connecttest.txt; do i=0; while [ "$i" -lt 100 ]; do wget -T 3 -qO- "http://127.0.0.1:8080${path}" >/dev/null; i=$((i + 1)); done; done'
+run_hey health "$HEY_HEALTH_REQUESTS" "$HEY_HEALTH_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/health"
+run_hey root "$HEY_PAGE_REQUESTS" "$HEY_PAGE_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/"
+run_hey generate-204 "$HEY_PAGE_REQUESTS" "$HEY_PAGE_CONCURRENCY" "http://127.0.0.1:${APP_HOST_PORT}/generate_204"
 $SSH_BASE 'test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok'
-$SSH_BASE 'free'
+{
+    echo "free_after:"
+    $SSH_BASE 'free'
+    echo "process_after:"
+    $SSH_BASE "ps w | grep '[h]otspot-fas'"
+    echo "dmesg_health_scan:"
+    $SSH_BASE "dmesg | grep -Ei 'oom|panic|segfault|killed process' || true"
+} > "$BENCHMARK_DIR/openwrt-after.txt"
 $SSH_BASE "! dmesg | grep -Ei 'oom|panic|segfault|killed process'"

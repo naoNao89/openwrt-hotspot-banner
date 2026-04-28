@@ -115,6 +115,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools openssh-client qemu-system-x86
+          go install github.com/rakyll/hey@v0.1.4
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Install Rust for QEMU binary
         uses: dtolnay/rust-toolchain@stable
@@ -131,6 +133,14 @@ jobs:
         env:
           QEMU_MEMORY_MB: ${{ matrix.memory_mb }}
         run: ./scripts/qemu-openwrt-smoke.sh
+
+      - name: Upload QEMU benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-benchmarks-${{ matrix.profile }}
+          path: .qemu-openwrt/benchmarks/
+          if-no-files-found: warn
 
   repo-hygiene:
     name: Repo hygiene
