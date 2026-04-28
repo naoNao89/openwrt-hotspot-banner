@@ -19,20 +19,40 @@ require_command() {
 }
 
 require_command curl
-require_command expect
 require_command gzip
+require_command losetup
+require_command mount
 require_command qemu-system-x86_64
 require_command scp
 require_command sha256sum
 require_command ssh
 require_command ssh-keygen
+require_command sudo
+require_command umount
 
 mkdir -p "$WORK_DIR"
 
 IMAGE_GZ_PATH="$WORK_DIR/$OPENWRT_IMAGE_GZ"
 IMAGE_PATH="$WORK_DIR/${OPENWRT_IMAGE_PREFIX}.img"
 SSH_KEY="$WORK_DIR/id_ed25519"
-EXPECT_SCRIPT="$WORK_DIR/qemu-smoke.expect"
+MOUNT_DIR="$WORK_DIR/rootfs"
+QEMU_PID=""
+LOOP_DEV=""
+
+cleanup() {
+    if [ -n "$QEMU_PID" ]; then
+        kill "$QEMU_PID" >/dev/null 2>&1 || true
+        wait "$QEMU_PID" >/dev/null 2>&1 || true
+    fi
+    if mountpoint -q "$MOUNT_DIR"; then
+        sudo umount "$MOUNT_DIR"
+    fi
+    if [ -n "$LOOP_DEV" ]; then
+        sudo losetup -d "$LOOP_DEV" >/dev/null 2>&1 || true
+    fi
+}
+
+trap cleanup EXIT INT TERM
 
 if [ ! -f "$IMAGE_GZ_PATH" ]; then
     curl -fsSL "$OPENWRT_BASE_URL/$OPENWRT_IMAGE_GZ" -o "$IMAGE_GZ_PATH"
@@ -52,63 +72,41 @@ rm -f "$SSH_KEY" "$SSH_KEY.pub"
 ssh-keygen -q -t ed25519 -N '' -f "$SSH_KEY"
 SSH_PUBLIC_KEY=$(cat "$SSH_KEY.pub")
 
-cat > "$EXPECT_SCRIPT" <<'EXPECT'
-set timeout 180
-set ssh_port [lindex $argv 0]
-set ssh_key [lindex $argv 1]
-set ssh_public_key [lindex $argv 2]
-set image_path [lindex $argv 3]
+mkdir -p "$MOUNT_DIR"
+LOOP_DEV=$(sudo losetup --find --partscan --show "$IMAGE_PATH")
+sudo mount "${LOOP_DEV}p2" "$MOUNT_DIR"
+sudo mkdir -p "$MOUNT_DIR/etc/dropbear"
+printf '%s\n' "$SSH_PUBLIC_KEY" | sudo tee "$MOUNT_DIR/etc/dropbear/authorized_keys" >/dev/null
+sudo chmod 600 "$MOUNT_DIR/etc/dropbear/authorized_keys"
+sudo umount "$MOUNT_DIR"
 
-spawn qemu-system-x86_64 -m 256 -nographic -no-reboot -drive file=$image_path,format=raw,if=virtio -netdev user,id=lan -device virtio-net-pci,netdev=lan -netdev user,id=wan,hostfwd=tcp:127.0.0.1:$ssh_port-:22 -device virtio-net-pci,netdev=wan
+qemu-system-x86_64 \
+    -m 256 \
+    -nographic \
+    -no-reboot \
+    -drive file="$IMAGE_PATH",format=raw,if=virtio \
+    -nic user,model=virtio-net-pci \
+    -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22" &
+QEMU_PID=$!
 
-expect {
-    "Please press Enter to activate this console." { send "\r" }
-    "root@OpenWrt" {}
-    timeout { exit 1 }
-}
+SSH_BASE="ssh -p $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@127.0.0.1"
+SCP_BASE="scp -P $SSH_PORT -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-expect {
-    "root@OpenWrt" {}
-    timeout { exit 1 }
-}
-
-proc console_run {cmd} {
-    send -- "$cmd\r"
-    expect {
-        "root@OpenWrt" {}
-        timeout { exit 1 }
-    }
-}
-
-console_run "cat /etc/openwrt_release"
-console_run "mkdir -p /etc/dropbear"
-console_run "echo '$ssh_public_key' > /etc/dropbear/authorized_keys"
-console_run "chmod 600 /etc/dropbear/authorized_keys"
-console_run "/etc/init.d/firewall stop || true"
-console_run "/etc/init.d/dropbear restart || /etc/init.d/dropbear start"
-
-set ssh_base "ssh -p $ssh_port -i $ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@127.0.0.1"
-set scp_base "scp -P $ssh_port -i $ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-set connected 0
-for {set i 0} {$i < 30} {incr i} {
-    if {[catch {exec sh -c "$ssh_base true"} result] == 0} {
-        set connected 1
+CONNECTED=0
+for _ in $(seq 1 60); do
+    if $SSH_BASE true >/dev/null 2>&1; then
+        CONNECTED=1
         break
-    }
-    after 2000
-}
-if {$connected != 1} {
+    fi
+    sleep 2
+done
+
+if [ "$CONNECTED" -ne 1 ]; then
     exit 1
-}
+fi
 
-exec sh -c "$ssh_base 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'"
-exec sh -c "$scp_base -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/"
-exec sh -c "$ssh_base 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harden-router-services.sh && ash -n openwrt-config/hotspot-firewall.sh && ash -n openwrt-config/iptables-captive.sh && ash -n openwrt-config/setup-router.sh && ash -n openwrt-config/uci-guest-setup.sh && ash -n scripts/check-shell.sh && ash -n scripts/test-router.sh && ash -n scripts/live-queue-e2e.sh && RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh'"
-exec sh -c "$ssh_base 'cat /etc/openwrt_release; command -v uci; command -v ip; command -v logger; command -v wget'"
-
-send "\001x"
-expect eof
-EXPECT
-
-expect "$EXPECT_SCRIPT" "$SSH_PORT" "$SSH_KEY" "$SSH_PUBLIC_KEY" "$IMAGE_PATH"
+$SSH_BASE 'cat /etc/openwrt_release'
+$SSH_BASE 'command -v uci; command -v ip; command -v logger; command -v wget'
+$SSH_BASE 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'
+$SCP_BASE -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/
+$SSH_BASE 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harden-router-services.sh && ash -n openwrt-config/hotspot-firewall.sh && ash -n openwrt-config/iptables-captive.sh && ash -n openwrt-config/setup-router.sh && ash -n openwrt-config/uci-guest-setup.sh && ash -n scripts/check-shell.sh && ash -n scripts/test-router.sh && ash -n scripts/live-queue-e2e.sh && ash -n scripts/qemu-openwrt-smoke.sh && RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh'
