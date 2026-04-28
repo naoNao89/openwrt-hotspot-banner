@@ -10,6 +10,7 @@ OPENWRT_IMAGE_SHA256="${OPENWRT_IMAGE_SHA256:-23dc6904ede514e37e9938604c9951a060
 OPENWRT_BASE_URL="${OPENWRT_BASE_URL:-https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${OPENWRT_TARGET}}"
 WORK_DIR="${QEMU_WORK_DIR:-.qemu-openwrt}"
 SSH_PORT="${QEMU_SSH_PORT:-2222}"
+QEMU_MEMORY_MB="${QEMU_MEMORY_MB:-256}"
 APP_BINARY_PATH="${QEMU_APP_BINARY:-target/x86_64-unknown-linux-musl/release/openwrt-hotspot-banner}"
 
 require_command() {
@@ -96,7 +97,7 @@ FIREWALL
 sudo umount "$MOUNT_DIR"
 
 qemu-system-x86_64 \
-    -m 256 \
+    -m "$QEMU_MEMORY_MB" \
     -nographic \
     -no-reboot \
     -drive file="$IMAGE_PATH",format=raw,if=virtio \
@@ -121,6 +122,7 @@ if [ "$CONNECTED" -ne 1 ]; then
 fi
 
 $SSH_BASE 'cat /etc/openwrt_release'
+$SSH_BASE 'free'
 $SSH_BASE 'command -v uci; command -v ip; command -v logger; command -v wget'
 $SSH_BASE 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'
 $SCP_BASE -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/
@@ -131,3 +133,7 @@ $SSH_BASE 'PORT=8080 SESSION_MINUTES=1 DISCONNECT_GRACE_SECONDS=1 QUEUE_RETRY_SE
 $SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok && exit 0; sleep 1; done; cat /tmp/hotspot-ci/hotspot-fas.log; exit 1'
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -q "Connect & Start Internet"'
 $SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -q "Connect & Start Internet"'
+$SSH_BASE 'for path in /health / /generate_204 /hotspot-detect.html /ncsi.txt /connecttest.txt; do i=0; while [ "$i" -lt 100 ]; do wget -T 3 -qO- "http://127.0.0.1:8080${path}" >/dev/null; i=$((i + 1)); done; done'
+$SSH_BASE 'test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok'
+$SSH_BASE 'free'
+$SSH_BASE "! dmesg | grep -Ei 'oom|panic|segfault|killed process'"
