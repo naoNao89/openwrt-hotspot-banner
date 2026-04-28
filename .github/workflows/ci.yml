@@ -77,4 +77,4 @@ jobs:
           grep -q 'SKIP live queue E2E is guarded' scripts/live-queue-e2e.sh
 
       - name: Check README fences
-        run: python3 -c "from pathlib import Path; text = Path('README.md').read_text(); assert text.count('```') % 2 == 0"
+        run: python3 -c 'from pathlib import Path; text = Path("README.md").read_text(); fence = chr(96) * 3; assert text.count(fence) % 2 == 0'
