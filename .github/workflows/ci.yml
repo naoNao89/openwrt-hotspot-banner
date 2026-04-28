@@ -89,6 +89,24 @@ jobs:
               RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh
             '
 
+  qemu-openwrt:
+    name: QEMU OpenWrt smoke
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/dev/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install QEMU tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y expect openssh-client qemu-system-x86
+
+      - name: Boot OpenWrt and run smoke checks
+        run: ./scripts/qemu-openwrt-smoke.sh
+
   repo-hygiene:
     name: Repo hygiene
     runs-on: ubuntu-latest
