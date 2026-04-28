@@ -10,6 +10,7 @@ OPENWRT_IMAGE_SHA256="${OPENWRT_IMAGE_SHA256:-23dc6904ede514e37e9938604c9951a060
 OPENWRT_BASE_URL="${OPENWRT_BASE_URL:-https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${OPENWRT_TARGET}}"
 WORK_DIR="${QEMU_WORK_DIR:-.qemu-openwrt}"
 SSH_PORT="${QEMU_SSH_PORT:-2222}"
+APP_BINARY_PATH="${QEMU_APP_BINARY:-target/x86_64-unknown-linux-musl/release/openwrt-hotspot-banner}"
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -29,6 +30,11 @@ require_command ssh
 require_command ssh-keygen
 require_command sudo
 require_command umount
+
+if [ ! -f "$APP_BINARY_PATH" ]; then
+    echo "Missing QEMU app binary: $APP_BINARY_PATH"
+    exit 2
+fi
 
 mkdir -p "$WORK_DIR"
 
@@ -118,4 +124,10 @@ $SSH_BASE 'cat /etc/openwrt_release'
 $SSH_BASE 'command -v uci; command -v ip; command -v logger; command -v wget'
 $SSH_BASE 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'
 $SCP_BASE -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/
+$SCP_BASE "$APP_BINARY_PATH" root@127.0.0.1:/tmp/hotspot-ci/hotspot-fas
 $SSH_BASE 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harden-router-services.sh && ash -n openwrt-config/hotspot-firewall.sh && ash -n openwrt-config/iptables-captive.sh && ash -n openwrt-config/setup-router.sh && ash -n openwrt-config/uci-guest-setup.sh && ash -n scripts/check-shell.sh && ash -n scripts/test-router.sh && ash -n scripts/live-queue-e2e.sh && ash -n scripts/qemu-openwrt-smoke.sh && RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh'
+$SSH_BASE 'chmod +x /tmp/hotspot-ci/hotspot-fas'
+$SSH_BASE 'PORT=8080 SESSION_MINUTES=1 DISCONNECT_GRACE_SECONDS=1 QUEUE_RETRY_SECONDS=1 MAX_ACTIVE_SESSIONS=30 GUEST_IFACE=br-lan /tmp/hotspot-ci/hotspot-fas >/tmp/hotspot-ci/hotspot-fas.log 2>&1 & echo $! >/tmp/hotspot-ci/hotspot-fas.pid'
+$SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok && exit 0; sleep 1; done; cat /tmp/hotspot-ci/hotspot-fas.log; exit 1'
+$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -q "Connect & Start Internet"'
+$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -q "Connect & Start Internet"'
