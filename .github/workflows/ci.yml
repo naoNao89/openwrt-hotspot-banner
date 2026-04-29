@@ -188,13 +188,6 @@ jobs:
             linker: musl-gcc
             apt_packages: musl-tools
             profile: openwrt
-          - id: mipsel_24kc
-            rust_target: mipsel-unknown-linux-musl
-            opkg_arch: mipsel_24kc
-            linker_env: CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER
-            linker: mipsel-linux-gnu-gcc
-            apt_packages: gcc-mipsel-linux-gnu
-            profile: openwrt
           - id: entware-aarch64
             rust_target: aarch64-unknown-linux-musl
             opkg_arch: aarch64-3.10
@@ -319,7 +312,7 @@ jobs:
           import json, re, sys, pathlib
           targets = json.loads(pathlib.Path("packaging/targets.json").read_text())
           ci = pathlib.Path(".github/workflows/ci.yml").read_text()
-          missing = [t["id"] for t in targets if f"id: {t['id']}" not in ci]
+          missing = [t["id"] for t in targets if not t.get("ci_skip") and f"id: {t['id']}" not in ci]
           if missing:
               print("Targets missing from CI matrix:", missing)
               sys.exit(1)

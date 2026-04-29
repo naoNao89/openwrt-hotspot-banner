@@ -47,7 +47,8 @@
     "linker": "mipsel-linux-gnu-gcc",
     "apt_packages": "gcc-mipsel-linux-gnu",
     "profile": "openwrt",
-    "notes": "Lean LEDE / older mt76xx (Newifi D2, Xiaomi Mi-R3G)"
+    "ci_skip": true,
+    "notes": "Lean LEDE / older mt76xx (Newifi D2, Xiaomi Mi-R3G). Tier-3 in stable rustup; build with nightly + `-Z build-std`. Skipped in CI by default."
   },
   {
     "id": "entware-aarch64",

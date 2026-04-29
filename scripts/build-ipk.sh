@@ -12,6 +12,9 @@
 #
 
 set -eu
+# pipefail catches silent failures inside `tar | gzip` on linux/GNU tar.
+# Older POSIX sh on busybox doesn't have it, so guard.
+( set -o pipefail ) 2>/dev/null && set -o pipefail || true
 
 PKG_NAME="${PKG_NAME:-openwrt-hotspot-banner}"
 PKG_VERSION="${PKG_VERSION:-0.1.0-1}"
@@ -143,8 +146,9 @@ chmod 0755 "$WORK/control/postinst" "$WORK/control/prerm"
 ABS_WORK="$(cd "$WORK" && pwd)"
 
 # Build control.tar.gz and data.tar.gz with deterministic-ish ownership
-( cd "$ABS_WORK/control" && tar --no-xattrs --uid 0 --gid 0 --numeric-owner --format=ustar -cf - . | gzip -n -9 >"$ABS_WORK/control.tar.gz" )
-( cd "$ABS_WORK/data"    && tar --no-xattrs --uid 0 --gid 0 --numeric-owner --format=ustar -cf - . | gzip -n -9 >"$ABS_WORK/data.tar.gz" )
+# Use --owner/--group (GNU tar) instead of --uid/--gid (libarchive-only).
+( cd "$ABS_WORK/control" && tar --owner=0 --group=0 --numeric-owner --format=ustar -cf - . | gzip -n -9 >"$ABS_WORK/control.tar.gz" )
+( cd "$ABS_WORK/data"    && tar --owner=0 --group=0 --numeric-owner --format=ustar -cf - . | gzip -n -9 >"$ABS_WORK/data.tar.gz" )
 
 printf '2.0\n' >"$WORK/debian-binary"
 
@@ -153,7 +157,7 @@ rm -f "$IPK"
 ABS_IPK="$(cd "$(dirname "$IPK")" && pwd)/$(basename "$IPK")"
 
 # OpenWrt/Entware ipk: outer gzipped tar of debian-binary, data.tar.gz, control.tar.gz.
-( cd "$ABS_WORK" && tar --no-xattrs --uid 0 --gid 0 --numeric-owner --format=ustar -cf - ./debian-binary ./data.tar.gz ./control.tar.gz | gzip -n -9 >"$ABS_IPK" )
+( cd "$ABS_WORK" && tar --owner=0 --group=0 --numeric-owner --format=ustar -cf - ./debian-binary ./data.tar.gz ./control.tar.gz | gzip -n -9 >"$ABS_IPK" )
 
 echo "Built: $IPK (profile=$INSTALL_PROFILE arch=$PKG_ARCH)"
 ls -la "$IPK"
