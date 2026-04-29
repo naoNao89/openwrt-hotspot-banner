@@ -192,12 +192,27 @@ Captive-portal pages are runtime-themable — drop HTML/CSS into
 `/etc/hotspot-banner/theme/` and the next request renders the new theme. No
 binary rebuild, no service restart.
 
-A working **Tailwind CSS** starter (no Node.js required) lives at
-[`themes/examples/tailwind/`](./themes/examples/tailwind/) — run
-`./build.sh` to download the standalone CLI and emit `dist/`. See the full
-guide at [`docs/theming.md`](./docs/theming.md) including template variables,
-the captive-portal walled-garden constraint, and how to bake a custom theme
-into a `.ipk`.
+To customize, copy our Tailwind example, tweak the HTML, rebuild, and push:
+
+```bash
+cp -r themes/examples/tailwind ~/my-portal-theme
+cd ~/my-portal-theme
+# edit src/{index,queue,success}.html — change classes, copy, branding
+./build.sh
+scp dist/* root@<router-ip>:/etc/hotspot-banner/theme/
+```
+
+`build.sh` auto-downloads the **Tailwind v4 standalone CLI** (no Node.js, no
+npm) and emits `dist/{index,queue,success}.html` plus a minified `style.css`.
+The portal picks up changes on the very next request.
+
+Available template variables: `{{title}}`, `{{accept_url}}`,
+`{{active_sessions}}`, `{{max_active_sessions}}`, `{{queue_retry_seconds}}`.
+
+Prefer plain CSS, or want to bake your theme into a `.ipk` so it survives
+factory resets? See the full guide at [`docs/theming.md`](./docs/theming.md)
+— covers the captive-portal walled-garden constraint (why CDN-loaded CSS
+won't work), three theming workflows, and SSH-vs-`.ipk` deployment paths.
 
 ## Notes
 
