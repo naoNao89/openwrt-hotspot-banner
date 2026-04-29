@@ -34,6 +34,7 @@ check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner
 check_script openwrt-package/openwrt-hotspot-banner/files-entware/opt/etc/init.d/S99hotspot-fas
 check_script scripts/build-ipk.sh
 check_script scripts/build-ipk-all.sh
+check_script themes/examples/tailwind/build.sh
 check_script scripts/deploy-package-test.sh
 check_script scripts/router-ipk-test.sh
 check_script scripts/router-ipk-remove-test.sh

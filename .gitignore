@@ -13,3 +13,7 @@ lcov.info
 *.swo
 *~
 .DS_Store
+
+# Theme build artifacts
+themes/**/.bin/
+themes/**/dist/

@@ -186,6 +186,19 @@ ssh root@<router-ip> 'iptables -S CAPTIVE_AUTH; iptables -t nat -S CAPTIVE_REDIR
 ssh root@<router-ip> 'logread | grep -Ei "hotspot|dnsmasq|DHCP" | tail -60'
 ```
 
+## Theming
+
+Captive-portal pages are runtime-themable — drop HTML/CSS into
+`/etc/hotspot-banner/theme/` and the next request renders the new theme. No
+binary rebuild, no service restart.
+
+A working **Tailwind CSS** starter (no Node.js required) lives at
+[`themes/examples/tailwind/`](./themes/examples/tailwind/) — run
+`./build.sh` to download the standalone CLI and emit `dist/`. See the full
+guide at [`docs/theming.md`](./docs/theming.md) including template variables,
+the captive-portal walled-garden constraint, and how to bake a custom theme
+into a `.ipk`.
+
 ## Notes
 
 - Modern HTTPS traffic cannot be transparently redirected without certificate errors.
