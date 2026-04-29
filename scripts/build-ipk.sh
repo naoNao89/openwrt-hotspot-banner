@@ -17,7 +17,8 @@ set -eu
 ( set -o pipefail ) 2>/dev/null && set -o pipefail || true
 
 PKG_NAME="${PKG_NAME:-openwrt-hotspot-banner}"
-PKG_VERSION="${PKG_VERSION:-0.1.0-1}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PKG_VERSION="${PKG_VERSION:-$("$HERE/pkg-version.sh")}"
 PKG_ARCH="${PKG_ARCH:-arm_cortex-a7_neon-vfpv4}"
 TARGET="${TARGET:-armv7-unknown-linux-musleabihf}"
 BINARY_NAME="${BINARY_NAME:-openwrt-hotspot-banner}"
@@ -69,14 +70,14 @@ if [ "$INSTALL_PROFILE" = "openwrt" ]; then
     chmod 0755 "$WORK/data/etc/hotplug.d/iface/99-hotspot-guest"
     find "$WORK/data/usr/lib/hotspot-banner" -name '*.sh' -exec chmod 0755 {} +
     chmod 0644 "$WORK/data/etc/config/hotspot-fas"
-    find "$WORK/data/etc/hotspot-banner" "$WORK/data/usr/share/hotspot-banner" -type f -exec chmod 0644 {} +
+    find "$WORK/data/usr/share/hotspot-banner" -type f -exec chmod 0644 {} +
 else
     mkdir -p "$WORK/data/opt/bin"
     cp "$LOCAL_BINARY" "$WORK/data/opt/bin/hotspot-fas"
     chmod 0755 "$WORK/data/opt/bin/hotspot-fas"
     chmod 0755 "$WORK/data/opt/etc/init.d/S99hotspot-fas"
     chmod 0644 "$WORK/data/opt/etc/hotspot-fas.conf"
-    find "$WORK/data/opt/etc/hotspot-banner" "$WORK/data/opt/share/hotspot-banner" -type f -exec chmod 0644 {} +
+    find "$WORK/data/opt/share/hotspot-banner" -type f -exec chmod 0644 {} +
 fi
 
 INSTALLED_SIZE="$(du -sk "$WORK/data" | awk '{print $1 * 1024}')"
@@ -109,6 +110,7 @@ EOF
     cat >"$WORK/control/postinst" <<'EOF'
 #!/bin/sh
 [ "${IPKG_INSTROOT}" ] && exit 0
+mkdir -p /etc/hotspot-banner/theme
 /etc/init.d/hotspot-fas enable >/dev/null 2>&1 || true
 /etc/init.d/hotspot-fas restart >/dev/null 2>&1 || true
 exit 0
@@ -129,6 +131,7 @@ EOF
     cat >"$WORK/control/postinst" <<'EOF'
 #!/bin/sh
 [ "${IPKG_INSTROOT}" ] && exit 0
+mkdir -p /opt/etc/hotspot-banner/theme
 /opt/etc/init.d/S99hotspot-fas restart >/dev/null 2>&1 || /opt/etc/init.d/S99hotspot-fas start >/dev/null 2>&1 || true
 exit 0
 EOF

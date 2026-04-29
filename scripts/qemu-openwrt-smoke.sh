@@ -211,8 +211,8 @@ $SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0
     echo "process_before:"
     $SSH_BASE "ps w | grep '[h]otspot-fas'"
 } | tee "$BENCHMARK_DIR/openwrt-before.txt"
-$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -Eq "Connect & Start Internet|CUSTOM_THEME_ACTIVE"'
-$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -Eq "Connect & Start Internet|CUSTOM_THEME_ACTIVE"'
+$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/ | grep -q "Connect & Start Internet"'
+$SSH_BASE 'wget -T 3 -qO- http://127.0.0.1:8080/generate_204 | grep -q "Connect & Start Internet"'
 group_start "In-guest endpoint stress"
 echo "paths=/health / /generate_204 /hotspot-detect.html /ncsi.txt /connecttest.txt"
 echo "requests_per_path=100"

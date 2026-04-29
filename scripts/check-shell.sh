@@ -32,6 +32,7 @@ check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner
 check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/setup-router.sh
 check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-setup.sh
 check_script openwrt-package/openwrt-hotspot-banner/files-entware/opt/etc/init.d/S99hotspot-fas
+check_script scripts/pkg-version.sh
 check_script scripts/build-ipk.sh
 check_script scripts/build-ipk-all.sh
 check_script themes/examples/tailwind/build.sh

@@ -214,6 +214,18 @@ factory resets? See the full guide at [`docs/theming.md`](./docs/theming.md)
 — covers the captive-portal walled-garden constraint (why CDN-loaded CSS
 won't work), three theming workflows, and SSH-vs-`.ipk` deployment paths.
 
+## Releases
+
+Tag-driven via `.github/workflows/release.yml`. Pushing `vX.Y.Z` cross-builds
+the matrix and attaches per-arch `.ipk` artifacts plus `SHA256SUMS` to a
+GitHub Release. The tag base must match `[package].version` in `Cargo.toml`
+(single source of truth, enforced by CI). Full procedure:
+[`docs/release.md`](./docs/release.md).
+
+`opkg upgrade` and `opkg install --force-reinstall` preserve the user's
+`/etc/hotspot-banner/theme/` directory — the package never ships into it.
+`/etc/config/hotspot-fas` is a declared conffile, so UCI edits also survive.
+
 ## Notes
 
 - Modern HTTPS traffic cannot be transparently redirected without certificate errors.

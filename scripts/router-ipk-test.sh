@@ -1,10 +1,14 @@
 #!/bin/sh
 # Run on the router. Stash previous file-based deploy, install the ipk,
-# verify service + custom theme, dump diagnostics.
+# verify service + default theme + empty user-theme dir, dump diagnostics.
+#
+# Pass IPK= to override the package path (defaults to the first matching .ipk
+# in /tmp).
 
 set -e
 
-IPK="${IPK:-/tmp/openwrt-hotspot-banner_0.1.0-1_arm_cortex-a7_neon-vfpv4.ipk}"
+DEFAULT_IPK="$(ls /tmp/openwrt-hotspot-banner_*_arm_cortex-a7_neon-vfpv4.ipk 2>/dev/null | head -1)"
+IPK="${IPK:-${DEFAULT_IPK:-/tmp/openwrt-hotspot-banner.ipk}}"
 TS="$(date +%Y%m%d%H%M%S)"
 STASH="/tmp/pre-ipk-${TS}"
 
@@ -44,11 +48,14 @@ echo "=== /health ==="
 wget -T 3 -qO- http://127.0.0.1:8080/health || true
 echo
 
-echo "=== custom theme marker ==="
-wget -T 3 -qO- http://127.0.0.1:8080/ | grep -c CUSTOM_THEME_ACTIVE || true
+echo "=== default theme renders ==="
+wget -T 3 -qO- http://127.0.0.1:8080/ | grep -c 'Connect & Start Internet' || true
 
 echo "=== /theme/style.css head ==="
 wget -T 3 -qO- http://127.0.0.1:8080/theme/style.css | head -3 || true
+
+echo "=== /etc/hotspot-banner/theme is empty (user territory) ==="
+ls -la /etc/hotspot-banner/theme 2>&1 || true
 
 echo "=== logread tail ==="
 logread | grep -i hotspot | tail -20 || true

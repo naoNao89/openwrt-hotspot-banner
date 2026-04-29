@@ -119,6 +119,25 @@ ssh root@router 'rm -rf /etc/hotspot-banner/theme/*'
 
 Resolution falls through to `/usr/share/hotspot-banner/default-theme/`.
 
+## Upgrade behavior
+
+`/etc/hotspot-banner/theme/` is **user territory** — the package never ships
+files there. `postinst` only runs `mkdir -p` to ensure the directory exists.
+This means your customizations survive `opkg install --force-reinstall` and
+`opkg upgrade` cleanly: opkg has nothing to overwrite there.
+
+Verified live on a CMCC RAX3000QY (OpenWrt 19.07): a user-dropped marker file
+in `/etc/hotspot-banner/theme/index.html` survives a forced reinstall with
+its original timestamp intact.
+
+The packaged default (`/usr/share/hotspot-banner/default-theme/*`) **is**
+package-owned and gets refreshed on upgrade — that's the right behavior;
+you'd want to pick up new template variables added by upstream.
+
+`/etc/config/hotspot-fas` is declared as an opkg conffile, so user UCI edits
+are preserved across upgrades (the new packaged version is saved alongside as
+`*-opkg`).
+
 ## Pitfalls
 
 - **Empty theme dir** is OK — falls through to the packaged default.

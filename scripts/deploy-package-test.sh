@@ -67,8 +67,17 @@ cp '$REMOTE_STAGE/etc/init.d/hotspot-fas' /etc/init.d/hotspot-fas
 chmod +x /etc/init.d/hotspot-fas
 cp '$REMOTE_STAGE/etc/hotplug.d/iface/99-hotspot-guest' /etc/hotplug.d/iface/99-hotspot-guest
 chmod +x /etc/hotplug.d/iface/99-hotspot-guest
-mkdir -p /etc/hotspot-banner /usr/share/hotspot-banner /usr/lib/hotspot-banner
-cp -a '$REMOTE_STAGE/etc/hotspot-banner/theme' /etc/hotspot-banner/theme
+mkdir -p /etc/hotspot-banner/theme /usr/share/hotspot-banner /usr/lib/hotspot-banner
+# Drop a fixture custom theme so we can prove the /etc override layer works.
+cat > /etc/hotspot-banner/theme/index.html <<'CUSTOM_HTML'
+<!DOCTYPE html><html><body><main class=\"custom-test-theme\"><h1>{{title}}</h1>
+<section class=\"notice\">CUSTOM_THEME_ACTIVE</section>
+<form method=\"GET\" action=\"{{accept_url}}\"><button>Connect & Start Internet</button></form>
+</main></body></html>
+CUSTOM_HTML
+cat > /etc/hotspot-banner/theme/style.css <<'CUSTOM_CSS'
+body{background:#2563eb;color:#fff}
+CUSTOM_CSS
 cp -a '$REMOTE_STAGE/usr/share/hotspot-banner/default-theme' /usr/share/hotspot-banner/default-theme
 cp -a '$REMOTE_STAGE/usr/lib/hotspot-banner/'* /usr/lib/hotspot-banner/
 chmod +x /usr/lib/hotspot-banner/*.sh

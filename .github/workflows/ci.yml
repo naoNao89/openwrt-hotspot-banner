@@ -255,6 +255,10 @@ jobs:
           tar -xzf /tmp/ipkx/control.tar.gz -C /tmp/ipkx ./control
           grep -q '^Package: openwrt-hotspot-banner$' /tmp/ipkx/control
           grep -q "^Architecture: ${PKG_ARCH}$" /tmp/ipkx/control
+          # /etc/hotspot-banner/theme is user territory; package must NOT ship files there.
+          if tar -tzf /tmp/ipkx/data.tar.gz | grep -E '^\./(etc|opt/etc)/hotspot-banner/theme/'; then
+            echo 'package wrongly ships user-theme files'; exit 1
+          fi
           tar -tzf /tmp/ipkx/data.tar.gz | tee /tmp/ipk-data.txt
           if [ "$PROFILE" = "openwrt" ]; then
             for required in \
@@ -266,7 +270,6 @@ jobs:
               ./usr/share/hotspot-banner/default-theme/queue.html \
               ./usr/share/hotspot-banner/default-theme/success.html \
               ./usr/share/hotspot-banner/default-theme/style.css \
-              ./etc/hotspot-banner/theme/index.html \
               ./usr/lib/hotspot-banner/hotspot-firewall.sh; do
               grep -qx "$required" /tmp/ipk-data.txt || { echo "missing in ipk: $required"; exit 1; }
             done
@@ -275,7 +278,6 @@ jobs:
               ./opt/bin/hotspot-fas \
               ./opt/etc/init.d/S99hotspot-fas \
               ./opt/etc/hotspot-fas.conf \
-              ./opt/etc/hotspot-banner/theme/index.html \
               ./opt/share/hotspot-banner/default-theme/index.html \
               ./opt/share/hotspot-banner/default-theme/queue.html \
               ./opt/share/hotspot-banner/default-theme/success.html \
