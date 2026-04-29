@@ -217,6 +217,15 @@ jobs:
               cargo install cross --locked --version 0.2.5
           fi
 
+      - name: Neutralize local zig-linker config for cross
+        run: |
+          # The repo's .cargo/config.toml pins armv7 to ./zig-linker.sh for
+          # local Mac builds. Cross runs inside its own Docker image and has
+          # its own (musl) linker, so strip the local override during CI.
+          if [ -f .cargo/config.toml ]; then
+              mv .cargo/config.toml .cargo/config.toml.local
+          fi
+
       - name: Cross-build release binary
         run: cross build --target ${{ matrix.target.rust_target }} --release
 
