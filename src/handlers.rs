@@ -1,7 +1,8 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{ConnectInfo, State},
+    body::Body,
+    extract::{ConnectInfo, Path, State},
     http::{header, StatusCode, Uri},
     response::{Html, IntoResponse, Response},
     routing::get,
@@ -12,6 +13,7 @@ use tracing::info;
 use crate::firewall;
 use crate::pages::{build_banner_page, build_queue_page, CLOSE_PAGE, SUCCESS_PAGE};
 use crate::state::AppState;
+use crate::theme::ThemeContext;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -25,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .route("/redirect", get(captive_probe_handler))
         .route("/accept", get(accept_handler))
         .route("/health", get(health_handler))
+        .route("/theme/*path", get(theme_asset_handler))
         .with_state(state)
 }
 
@@ -36,21 +39,16 @@ async fn root_handler(
 
     if state.is_authenticated(&client_ip) {
         info!("Already authenticated (root): {}", client_ip);
-        return Html(SUCCESS_PAGE).into_response();
+        return Html(render_success_page(&state)).into_response();
     }
 
     if state.is_queue_full_for(&client_ip) {
         info!("Queued client (root): {}", client_ip);
-        return Html(build_queue_page(
-            state.queue_retry_seconds(),
-            state.active_session_count(),
-            state.max_active_sessions(),
-        ))
-        .into_response();
+        return Html(render_queue_page(&state)).into_response();
     }
 
     info!("Unauthenticated client (root): {}", client_ip);
-    Html(build_banner_page("FreeWiFi", "/accept", None, None)).into_response()
+    Html(render_banner_page(&state)).into_response()
 }
 
 async fn captive_probe_handler(
@@ -68,16 +66,11 @@ async fn captive_probe_handler(
 
     if state.is_queue_full_for(&client_ip) {
         info!("Queued probe: {} {}", client_ip, path);
-        return Html(build_queue_page(
-            state.queue_retry_seconds(),
-            state.active_session_count(),
-            state.max_active_sessions(),
-        ))
-        .into_response();
+        return Html(render_queue_page(&state)).into_response();
     }
 
     info!("Unauthenticated probe: {} {}", client_ip, path);
-    Html(build_banner_page("FreeWiFi", "/accept", None, None)).into_response()
+    Html(render_banner_page(&state)).into_response()
 }
 
 fn os_success_response(path: &str) -> Response {
@@ -114,12 +107,7 @@ async fn accept_handler(
 
     if !state.authenticate(&client_ip, client_mac.clone()) {
         info!("Client queued: {} {:?}", client_ip, client_mac);
-        return Html(build_queue_page(
-            state.queue_retry_seconds(),
-            state.active_session_count(),
-            state.max_active_sessions(),
-        ))
-        .into_response();
+        return Html(render_queue_page(&state)).into_response();
     }
 
     firewall::add_iptables_accept(&client_ip, client_mac.as_deref());
@@ -131,9 +119,66 @@ async fn health_handler() -> &'static str {
     "ok"
 }
 
+async fn theme_asset_handler(State(state): State<AppState>, Path(path): Path<String>) -> Response {
+    if let Some(asset) = state.theme().asset(&path) {
+        return (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, asset.content_type)],
+            Body::from(asset.body),
+        )
+            .into_response();
+    }
+
+    StatusCode::NOT_FOUND.into_response()
+}
+
+fn render_banner_page(state: &AppState) -> String {
+    let context = theme_context(state);
+
+    state
+        .theme()
+        .render_page("index.html", &context)
+        .unwrap_or_else(|| build_banner_page("FreeWiFi", "/accept", None, None))
+}
+
+fn render_queue_page(state: &AppState) -> String {
+    let context = theme_context(state);
+
+    state
+        .theme()
+        .render_page("queue.html", &context)
+        .unwrap_or_else(|| {
+            build_queue_page(
+                state.queue_retry_seconds(),
+                state.active_session_count(),
+                state.max_active_sessions(),
+            )
+        })
+}
+
+fn render_success_page(state: &AppState) -> String {
+    let context = theme_context(state);
+
+    state
+        .theme()
+        .render_page("success.html", &context)
+        .unwrap_or_else(|| SUCCESS_PAGE.to_string())
+}
+
+fn theme_context(state: &AppState) -> ThemeContext<'static> {
+    ThemeContext {
+        title: "FreeWiFi",
+        accept_url: "/accept",
+        active_sessions: state.active_session_count(),
+        max_active_sessions: state.max_active_sessions(),
+        queue_retry_seconds: state.queue_retry_seconds(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::path::PathBuf;
     use std::time::Duration;
 
     use axum::body::{to_bytes, Body};
@@ -150,6 +195,8 @@ mod tests {
             Duration::from_secs(300),
             max_active_sessions,
             "ath01".to_string(),
+            PathBuf::from("/tmp/missing-hotspot-theme"),
+            PathBuf::from("/tmp/missing-hotspot-default-theme"),
         )
     }
 
