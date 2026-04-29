@@ -88,7 +88,9 @@ jobs:
               ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/hotspot-firewall.sh
               ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/setup-router.sh
               ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-setup.sh
+              ash -n openwrt-package/openwrt-hotspot-banner/files-entware/opt/etc/init.d/S99hotspot-fas
               ash -n scripts/build-ipk.sh
+              ash -n scripts/build-ipk-all.sh
               ash -n scripts/check-shell.sh
               ash -n scripts/deploy-package-test.sh
               ash -n scripts/router-ipk-test.sh
@@ -152,36 +154,91 @@ jobs:
           if-no-files-found: warn
 
   ipk-build:
-    name: Build OpenWrt .ipk
+    name: Build .ipk (${{ matrix.target.id }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - id: arm_cortex-a7_neon-vfpv4
+            rust_target: armv7-unknown-linux-musleabihf
+            opkg_arch: arm_cortex-a7_neon-vfpv4
+            linker_env: CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER
+            linker: arm-linux-gnueabihf-gcc
+            apt_packages: gcc-arm-linux-gnueabihf
+            profile: openwrt
+          - id: aarch64_cortex-a53
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64_cortex-a53
+            linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER
+            linker: aarch64-linux-gnu-gcc
+            apt_packages: gcc-aarch64-linux-gnu
+            profile: openwrt
+          - id: aarch64_generic
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64_generic
+            linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER
+            linker: aarch64-linux-gnu-gcc
+            apt_packages: gcc-aarch64-linux-gnu
+            profile: openwrt
+          - id: x86_64
+            rust_target: x86_64-unknown-linux-musl
+            opkg_arch: x86_64
+            linker_env: CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER
+            linker: musl-gcc
+            apt_packages: musl-tools
+            profile: openwrt
+          - id: mipsel_24kc
+            rust_target: mipsel-unknown-linux-musl
+            opkg_arch: mipsel_24kc
+            linker_env: CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER
+            linker: mipsel-linux-gnu-gcc
+            apt_packages: gcc-mipsel-linux-gnu
+            profile: openwrt
+          - id: entware-aarch64
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64-3.10
+            linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER
+            linker: aarch64-linux-gnu-gcc
+            apt_packages: gcc-aarch64-linux-gnu
+            profile: entware
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Install Rust (armv7 musl)
+      - name: Install Rust (${{ matrix.target.rust_target }})
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: armv7-unknown-linux-musleabihf
+          targets: ${{ matrix.target.rust_target }}
 
       - name: Install cross toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf
+          sudo apt-get install -y ${{ matrix.target.apt_packages }}
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ipk-${{ matrix.target.id }}
 
       - name: Build .ipk
         env:
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: ./scripts/build-ipk.sh
+          TARGET: ${{ matrix.target.rust_target }}
+          PKG_ARCH: ${{ matrix.target.opkg_arch }}
+          INSTALL_PROFILE: ${{ matrix.target.profile }}
+        run: |
+          export ${{ matrix.target.linker_env }}=${{ matrix.target.linker }}
+          ./scripts/build-ipk.sh
 
       - name: Verify .ipk format
+        env:
+          PKG_ARCH: ${{ matrix.target.opkg_arch }}
+          PROFILE: ${{ matrix.target.profile }}
         run: |
           set -e
-          IPK="$(ls target/ipk/openwrt-hotspot-banner_*_arm_cortex-a7_neon-vfpv4.ipk | head -1)"
+          IPK="$(ls target/ipk/openwrt-hotspot-banner_*_${PKG_ARCH}.ipk | head -1)"
           echo "IPK=$IPK"
           file "$IPK" | tee /tmp/ipk-file.txt
           grep -q 'gzip compressed' /tmp/ipk-file.txt
@@ -192,27 +249,41 @@ jobs:
           mkdir -p /tmp/ipkx && tar -xzf "$IPK" -C /tmp/ipkx
           tar -xzf /tmp/ipkx/control.tar.gz -C /tmp/ipkx ./control
           grep -q '^Package: openwrt-hotspot-banner$' /tmp/ipkx/control
-          grep -q '^Architecture: arm_cortex-a7_neon-vfpv4$' /tmp/ipkx/control
+          grep -q "^Architecture: ${PKG_ARCH}$" /tmp/ipkx/control
           tar -tzf /tmp/ipkx/data.tar.gz | tee /tmp/ipk-data.txt
-          for required in \
-            ./usr/bin/hotspot-fas \
-            ./etc/init.d/hotspot-fas \
-            ./etc/config/hotspot-fas \
-            ./etc/hotplug.d/iface/99-hotspot-guest \
-            ./usr/share/hotspot-banner/default-theme/index.html \
-            ./usr/share/hotspot-banner/default-theme/queue.html \
-            ./usr/share/hotspot-banner/default-theme/success.html \
-            ./usr/share/hotspot-banner/default-theme/style.css \
-            ./etc/hotspot-banner/theme/index.html \
-            ./usr/lib/hotspot-banner/hotspot-firewall.sh; do
-            grep -qx "$required" /tmp/ipk-data.txt || { echo "missing in ipk: $required"; exit 1; }
-          done
+          if [ "$PROFILE" = "openwrt" ]; then
+            for required in \
+              ./usr/bin/hotspot-fas \
+              ./etc/init.d/hotspot-fas \
+              ./etc/config/hotspot-fas \
+              ./etc/hotplug.d/iface/99-hotspot-guest \
+              ./usr/share/hotspot-banner/default-theme/index.html \
+              ./usr/share/hotspot-banner/default-theme/queue.html \
+              ./usr/share/hotspot-banner/default-theme/success.html \
+              ./usr/share/hotspot-banner/default-theme/style.css \
+              ./etc/hotspot-banner/theme/index.html \
+              ./usr/lib/hotspot-banner/hotspot-firewall.sh; do
+              grep -qx "$required" /tmp/ipk-data.txt || { echo "missing in ipk: $required"; exit 1; }
+            done
+          else
+            for required in \
+              ./opt/bin/hotspot-fas \
+              ./opt/etc/init.d/S99hotspot-fas \
+              ./opt/etc/hotspot-fas.conf \
+              ./opt/etc/hotspot-banner/theme/index.html \
+              ./opt/share/hotspot-banner/default-theme/index.html \
+              ./opt/share/hotspot-banner/default-theme/queue.html \
+              ./opt/share/hotspot-banner/default-theme/success.html \
+              ./opt/share/hotspot-banner/default-theme/style.css; do
+              grep -qx "$required" /tmp/ipk-data.txt || { echo "missing in ipk: $required"; exit 1; }
+            done
+          fi
 
       - name: Upload .ipk artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-hotspot-banner-ipk
-          path: target/ipk/openwrt-hotspot-banner_*.ipk
+          name: openwrt-hotspot-banner-${{ matrix.target.id }}
+          path: target/ipk/openwrt-hotspot-banner_*_${{ matrix.target.opkg_arch }}.ipk
           if-no-files-found: error
 
   repo-hygiene:
@@ -241,3 +312,16 @@ jobs:
 
       - name: Check README fences
         run: python3 -c 'from pathlib import Path; text = Path("README.md").read_text(); fence = chr(96) * 3; assert text.count(fence) % 2 == 0'
+
+      - name: Verify packaging targets stay in sync with CI matrix
+        run: |
+          python3 - <<'PY'
+          import json, re, sys, pathlib
+          targets = json.loads(pathlib.Path("packaging/targets.json").read_text())
+          ci = pathlib.Path(".github/workflows/ci.yml").read_text()
+          missing = [t["id"] for t in targets if f"id: {t['id']}" not in ci]
+          if missing:
+              print("Targets missing from CI matrix:", missing)
+              sys.exit(1)
+          print(f"OK: {len(targets)} targets in sync with CI matrix")
+          PY
