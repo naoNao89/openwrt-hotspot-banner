@@ -83,7 +83,16 @@ jobs:
               ash -n openwrt-config/iptables-captive.sh
               ash -n openwrt-config/setup-router.sh
               ash -n openwrt-config/uci-guest-setup.sh
+              ash -n openwrt-package/openwrt-hotspot-banner/files/etc/init.d/hotspot-fas
+              ash -n openwrt-package/openwrt-hotspot-banner/files/etc/hotplug.d/iface/99-hotspot-guest
+              ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/hotspot-firewall.sh
+              ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/setup-router.sh
+              ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-setup.sh
+              ash -n scripts/build-ipk.sh
               ash -n scripts/check-shell.sh
+              ash -n scripts/deploy-package-test.sh
+              ash -n scripts/router-ipk-test.sh
+              ash -n scripts/router-ipk-remove-test.sh
               ash -n scripts/test-router.sh
               ash -n scripts/live-queue-e2e.sh
               RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh
@@ -141,6 +150,70 @@ jobs:
           name: qemu-benchmarks-${{ matrix.profile }}
           path: .qemu-openwrt/benchmarks/
           if-no-files-found: warn
+
+  ipk-build:
+    name: Build OpenWrt .ipk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust (armv7 musl)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build .ipk
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: ./scripts/build-ipk.sh
+
+      - name: Verify .ipk format
+        run: |
+          set -e
+          IPK="$(ls target/ipk/openwrt-hotspot-banner_*_arm_cortex-a7_neon-vfpv4.ipk | head -1)"
+          echo "IPK=$IPK"
+          file "$IPK" | tee /tmp/ipk-file.txt
+          grep -q 'gzip compressed' /tmp/ipk-file.txt
+          tar -tzf "$IPK" | sort | tee /tmp/ipk-outer.txt
+          grep -qx './debian-binary' /tmp/ipk-outer.txt
+          grep -qx './control.tar.gz' /tmp/ipk-outer.txt
+          grep -qx './data.tar.gz' /tmp/ipk-outer.txt
+          mkdir -p /tmp/ipkx && tar -xzf "$IPK" -C /tmp/ipkx
+          tar -xzf /tmp/ipkx/control.tar.gz -C /tmp/ipkx ./control
+          grep -q '^Package: openwrt-hotspot-banner$' /tmp/ipkx/control
+          grep -q '^Architecture: arm_cortex-a7_neon-vfpv4$' /tmp/ipkx/control
+          tar -tzf /tmp/ipkx/data.tar.gz | tee /tmp/ipk-data.txt
+          for required in \
+            ./usr/bin/hotspot-fas \
+            ./etc/init.d/hotspot-fas \
+            ./etc/config/hotspot-fas \
+            ./etc/hotplug.d/iface/99-hotspot-guest \
+            ./usr/share/hotspot-banner/default-theme/index.html \
+            ./usr/share/hotspot-banner/default-theme/queue.html \
+            ./usr/share/hotspot-banner/default-theme/success.html \
+            ./usr/share/hotspot-banner/default-theme/style.css \
+            ./etc/hotspot-banner/theme/index.html \
+            ./usr/lib/hotspot-banner/hotspot-firewall.sh; do
+            grep -qx "$required" /tmp/ipk-data.txt || { echo "missing in ipk: $required"; exit 1; }
+          done
+
+      - name: Upload .ipk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-hotspot-banner-ipk
+          path: target/ipk/openwrt-hotspot-banner_*.ipk
+          if-no-files-found: error
 
   repo-hygiene:
     name: Repo hygiene
