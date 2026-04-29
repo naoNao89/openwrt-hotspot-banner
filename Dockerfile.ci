@@ -10,6 +10,7 @@ COPY scripts ./scripts
 COPY openwrt-config ./openwrt-config
 COPY openwrt-package ./openwrt-package
 COPY packaging ./packaging
+COPY themes ./themes
 COPY Makefile README.md ./
 
 RUN make ci
