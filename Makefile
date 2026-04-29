@@ -9,7 +9,7 @@ REMOTE_HOST := $(ROUTER_USER)@$(ROUTER_IP)
 REMOTE_PATH := /usr/bin/hotspot-fas
 BUILD_DIR := target/$(TARGET)/release
 
-.PHONY: all build clean install-target deploy deploy-package-test ipk run ci ci-docker
+.PHONY: all build clean install-target deploy deploy-package-test ipk ipk-all run ci ci-docker
 
 all: build
 
@@ -41,6 +41,9 @@ deploy-package-test: build
 
 ipk: build
 	SKIP_BUILD=1 ./scripts/build-ipk.sh
+
+ipk-all:
+	./scripts/build-ipk-all.sh
 
 run:
 	cargo run
