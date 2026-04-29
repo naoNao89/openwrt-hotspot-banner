@@ -206,24 +206,27 @@ jobs:
         with:
           targets: ${{ matrix.target.rust_target }}
 
-      - name: Install cross toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.target.apt_packages }}
-
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           key: ipk-${{ matrix.target.id }}
 
-      - name: Build .ipk
+      - name: Install cross
+        run: |
+          if ! command -v cross >/dev/null 2>&1; then
+              cargo install cross --locked --version 0.2.5
+          fi
+
+      - name: Cross-build release binary
+        run: cross build --target ${{ matrix.target.rust_target }} --release
+
+      - name: Package .ipk
         env:
+          SKIP_BUILD: "1"
           TARGET: ${{ matrix.target.rust_target }}
           PKG_ARCH: ${{ matrix.target.opkg_arch }}
           INSTALL_PROFILE: ${{ matrix.target.profile }}
-        run: |
-          export ${{ matrix.target.linker_env }}=${{ matrix.target.linker }}
-          ./scripts/build-ipk.sh
+        run: ./scripts/build-ipk.sh
 
       - name: Verify .ipk format
         env:
