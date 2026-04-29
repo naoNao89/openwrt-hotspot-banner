@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="{{queue_retry_seconds}}">
+    <title>{{title}} Queue</title>
+    <link rel="stylesheet" href="/theme/style.css">
+</head>
+<body>
+    <main class="card">
+        <div class="wifi-icon">⏳</div>
+        <h1>FreeWiFi is full</h1>
+        <p class="subtitle">Too many guests are online right now. Please stay connected to WiFi and try again soon.</p>
+        <section class="notice">This page will refresh automatically in {{queue_retry_seconds}} seconds.</section>
+        <p class="terms">Active sessions: {{active_sessions}} / {{max_active_sessions}}</p>
+    </main>
+</body>
+</html>

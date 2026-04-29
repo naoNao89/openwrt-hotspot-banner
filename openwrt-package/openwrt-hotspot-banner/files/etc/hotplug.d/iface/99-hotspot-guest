@@ -1,0 +1,16 @@
+#!/bin/sh
+
+[ "$INTERFACE" = "guest" ] || exit 0
+
+if [ -f /etc/config/hotspot-fas ]; then
+	config_load hotspot-fas
+	config_get port main port 8080
+	config_get guest_iface main guest_iface ath01
+	config_get guest_ip main guest_ip 192.168.28.1
+else
+	port=8080
+	guest_iface=ath01
+	guest_ip=192.168.28.1
+fi
+
+GUEST_WIFI_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" sh /usr/lib/hotspot-banner/hotspot-firewall.sh 2>/dev/null || true
