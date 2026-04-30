@@ -26,6 +26,8 @@ ci:
 	cargo clippy --all-targets -- -D warnings
 	cargo test --locked
 	./scripts/check-shell.sh
+	./tests/teardown-mock.sh
+	./tests/regression-guest-iface-and-dhcp.sh
 
 ci-docker:
 	docker build -f Dockerfile.ci -t openwrt-hotspot-banner-ci .

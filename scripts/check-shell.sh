@@ -31,6 +31,10 @@ check_script openwrt-package/openwrt-hotspot-banner/files/etc/hotplug.d/iface/99
 check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/hotspot-firewall.sh
 check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/setup-router.sh
 check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-setup.sh
+check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-teardown.sh
+check_script openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/guest-watcher.sh
+check_script tests/teardown-mock.sh
+check_script tests/regression-guest-iface-and-dhcp.sh
 check_script openwrt-package/openwrt-hotspot-banner/files-entware/opt/etc/init.d/S99hotspot-fas
 check_script scripts/pkg-version.sh
 check_script scripts/build-ipk.sh

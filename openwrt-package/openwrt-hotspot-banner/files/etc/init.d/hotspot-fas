@@ -30,9 +30,40 @@ start_service() {
 	ip link add name br-guest type bridge 2>/dev/null || true
 	ip link set br-guest up 2>/dev/null || true
 	ip addr add "${guest_ip}/24" dev br-guest 2>/dev/null || true
-	ip link set "$guest_iface" master br-guest 2>/dev/null || true
-	ip link set "$guest_iface" up 2>/dev/null || true
-	GUEST_WIFI_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" sh /usr/lib/hotspot-banner/hotspot-firewall.sh 2>/dev/null || true
+
+	# Best-effort first attempt (covers the warm-restart case where wifi is
+	# already up). The persistent watcher (below) handles the cold-boot race.
+	if ip link show "$guest_iface" >/dev/null 2>&1; then
+		ip link set "$guest_iface" master br-guest 2>/dev/null || true
+		ip link set "$guest_iface" up 2>/dev/null || true
+		GUEST_WIFI_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" sh /usr/lib/hotspot-banner/hotspot-firewall.sh 2>/dev/null || true
+	fi
+
+	# Detached watcher: keeps retrying until $guest_iface appears, then
+	# enslaves + reapplies firewall + reloads dnsmasq. Survives slow QSDK boots.
+	if [ -x /usr/lib/hotspot-banner/guest-watcher.sh ]; then
+		# Kill any previous watcher(s) to keep at most one alive.
+		# Busybox lacks pkill, and `killall guest-watcher.sh` doesn't
+		# match because /proc/N/comm for a script is its interpreter
+		# (sh), not the script name. Match by /proc/N/cmdline instead.
+		for _p in $(grep -l guest-watcher.sh /proc/[0-9]*/cmdline 2>/dev/null); do
+			_pid="${_p%/cmdline}"
+			kill "${_pid##*/}" 2>/dev/null || true
+		done
+		# Fully detach stdio so the parent (procd, ssh, init.d caller)
+		# doesn't wait on the watcher's pipes when invoked over SSH.
+		GUEST_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" \
+			/usr/lib/hotspot-banner/guest-watcher.sh </dev/null >/dev/null 2>&1 &
+	fi
+
+	# QSDK boxes: ensure dnsmasq picks up our static guest dhcp-range. The
+	# packaged /etc/dnsmasq.d/guest.conf is loaded only if dnsmasq's main
+	# config has `conf-dir=/etc/dnsmasq.d/,*.conf`. Add it idempotently.
+	if [ -f /etc/dnsmasq.conf ] && ! grep -q '^conf-dir=/etc/dnsmasq\.d' /etc/dnsmasq.conf; then
+		echo 'conf-dir=/etc/dnsmasq.d/,*.conf' >>/etc/dnsmasq.conf
+		/etc/init.d/dnsmasq reload >/dev/null 2>&1 || /etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+		logger -t hotspot-fas "added conf-dir to /etc/dnsmasq.conf and reloaded dnsmasq"
+	fi
 
 	procd_open_instance
 	procd_set_param command "$PROG"
@@ -41,4 +72,11 @@ start_service() {
 	procd_set_param stderr 1
 	procd_set_param respawn 3600 5 5
 	procd_close_instance
+}
+
+stop_service() {
+	for _p in $(grep -l guest-watcher.sh /proc/[0-9]*/cmdline 2>/dev/null); do
+		_pid="${_p%/cmdline}"
+		kill "${_pid##*/}" 2>/dev/null || true
+	done
 }
