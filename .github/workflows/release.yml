@@ -1,0 +1,167 @@
+name: Release
+
+# Tag-driven release: pushing a `v<MAJOR>.<MINOR>.<PATCH>` tag triggers a
+# multi-arch .ipk build matrix and attaches the artifacts to a GitHub Release.
+#
+# Tag policy:
+#   - Tag MUST match the [package].version in Cargo.toml (sans leading `v`).
+#     The release job verifies this and fails fast otherwise.
+#   - PKG_RELEASE defaults to 1; bump via `PKG_RELEASE=2 git tag v0.1.0` if you
+#     need to re-cut a packaging-only revision (rare).
+#
+# Cutting a release:
+#   1. Bump Cargo.toml [package].version (and Cargo.lock).
+#   2. Commit, push to main.
+#   3. `git tag v0.1.1 && git push origin v0.1.1`.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)package, e.g. v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  verify-tag:
+    name: Verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    outputs:
+      pkg_version: ${{ steps.versions.outputs.pkg_version }}
+      tag_version: ${{ steps.versions.outputs.tag_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - id: versions
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-}"
+          if [ -n "${{ github.event.inputs.tag }}" ]; then TAG="${{ github.event.inputs.tag }}"; fi
+          TAG_VER="${TAG#v}"
+          # strip any -<release> suffix
+          BASE_VER="${TAG_VER%%-*}"
+          CARGO_VER="$(./scripts/pkg-version.sh)"
+          CARGO_BASE="${CARGO_VER%-*}"
+          echo "tag=$TAG cargo_version=$CARGO_VER cargo_base=$CARGO_BASE tag_base=$BASE_VER"
+          if [ "$BASE_VER" != "$CARGO_BASE" ]; then
+              echo "Tag base version ($BASE_VER) != Cargo.toml [package].version ($CARGO_BASE)" >&2
+              exit 1
+          fi
+          echo "pkg_version=$CARGO_VER" >>"$GITHUB_OUTPUT"
+          echo "tag_version=$TAG"       >>"$GITHUB_OUTPUT"
+
+  build-ipk:
+    name: Build .ipk (${{ matrix.target.id }})
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - id: arm_cortex-a7_neon-vfpv4
+            rust_target: armv7-unknown-linux-musleabihf
+            opkg_arch: arm_cortex-a7_neon-vfpv4
+            profile: openwrt
+          - id: aarch64_cortex-a53
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64_cortex-a53
+            profile: openwrt
+          - id: aarch64_generic
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64_generic
+            profile: openwrt
+          - id: x86_64
+            rust_target: x86_64-unknown-linux-musl
+            opkg_arch: x86_64
+            profile: openwrt
+          - id: entware-aarch64
+            rust_target: aarch64-unknown-linux-musl
+            opkg_arch: aarch64-3.10
+            profile: entware
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target.rust_target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-ipk-${{ matrix.target.id }}
+
+      - name: Install cross
+        run: |
+          if ! command -v cross >/dev/null 2>&1; then
+              cargo install cross --locked --version 0.2.5
+          fi
+
+      - name: Neutralize local zig-linker config for cross
+        run: |
+          if [ -f .cargo/config.toml ]; then
+              mv .cargo/config.toml .cargo/config.toml.local
+          fi
+
+      - name: Cross-build release binary
+        run: cross build --target ${{ matrix.target.rust_target }} --release
+
+      - name: Package .ipk
+        env:
+          SKIP_BUILD: "1"
+          PKG_VERSION: ${{ needs.verify-tag.outputs.pkg_version }}
+          TARGET: ${{ matrix.target.rust_target }}
+          PKG_ARCH: ${{ matrix.target.opkg_arch }}
+          INSTALL_PROFILE: ${{ matrix.target.profile }}
+        run: ./scripts/build-ipk.sh
+
+      - name: Upload .ipk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-hotspot-banner-${{ matrix.target.id }}
+          path: target/ipk/openwrt-hotspot-banner_*_${{ matrix.target.opkg_arch }}.ipk
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [verify-tag, build-ipk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Download all .ipk artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Generate sha256 manifest
+        run: |
+          cd artifacts
+          sha256sum *.ipk | tee SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify-tag.outputs.tag_version }}
+          name: ${{ needs.verify-tag.outputs.tag_version }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.ipk
+            artifacts/SHA256SUMS

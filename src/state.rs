@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tracing::info;
 
 use crate::firewall;
+use crate::theme::Theme;
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -22,6 +24,7 @@ pub struct AppState {
     queue_retry: Duration,
     max_active_sessions: usize,
     guest_iface: String,
+    theme: Theme,
 }
 
 impl AppState {
@@ -31,6 +34,8 @@ impl AppState {
         queue_retry: Duration,
         max_active_sessions: usize,
         guest_iface: String,
+        theme_dir: PathBuf,
+        default_theme_dir: PathBuf,
     ) -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -40,6 +45,7 @@ impl AppState {
             queue_retry,
             max_active_sessions,
             guest_iface,
+            theme: Theme::new(theme_dir, default_theme_dir),
         }
     }
 
@@ -88,6 +94,10 @@ impl AppState {
 
     pub fn max_active_sessions(&self) -> usize {
         self.max_active_sessions
+    }
+
+    pub fn theme(&self) -> &Theme {
+        &self.theme
     }
 
     pub fn is_queue_full_for(&self, client_ip: &str) -> bool {
@@ -215,12 +225,15 @@ pub fn cleanup_empty_state() {
         Duration::from_secs(300),
         30,
         "ath01".to_string(),
+        PathBuf::from("/tmp/missing-hotspot-theme"),
+        PathBuf::from("/tmp/missing-hotspot-default-theme"),
     )
     .cleanup_expired_sessions();
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::Duration;
 
     use super::AppState;
@@ -232,6 +245,8 @@ mod tests {
             Duration::from_secs(300),
             max_active_sessions,
             "ath01".to_string(),
+            PathBuf::from("/tmp/missing-hotspot-theme"),
+            PathBuf::from("/tmp/missing-hotspot-default-theme"),
         )
     }
 

@@ -186,6 +186,46 @@ ssh root@<router-ip> 'iptables -S CAPTIVE_AUTH; iptables -t nat -S CAPTIVE_REDIR
 ssh root@<router-ip> 'logread | grep -Ei "hotspot|dnsmasq|DHCP" | tail -60'
 ```
 
+## Theming
+
+Captive-portal pages are runtime-themable — drop HTML/CSS into
+`/etc/hotspot-banner/theme/` and the next request renders the new theme. No
+binary rebuild, no service restart.
+
+To customize, copy our Tailwind example, tweak the HTML, rebuild, and push:
+
+```bash
+cp -r themes/examples/tailwind ~/my-portal-theme
+cd ~/my-portal-theme
+# edit src/{index,queue,success}.html — change classes, copy, branding
+./build.sh
+scp dist/* root@<router-ip>:/etc/hotspot-banner/theme/
+```
+
+`build.sh` auto-downloads the **Tailwind v4 standalone CLI** (no Node.js, no
+npm) and emits `dist/{index,queue,success}.html` plus a minified `style.css`.
+The portal picks up changes on the very next request.
+
+Available template variables: `{{title}}`, `{{accept_url}}`,
+`{{active_sessions}}`, `{{max_active_sessions}}`, `{{queue_retry_seconds}}`.
+
+Prefer plain CSS, or want to bake your theme into a `.ipk` so it survives
+factory resets? See the full guide at [`docs/theming.md`](./docs/theming.md)
+— covers the captive-portal walled-garden constraint (why CDN-loaded CSS
+won't work), three theming workflows, and SSH-vs-`.ipk` deployment paths.
+
+## Releases
+
+Tag-driven via `.github/workflows/release.yml`. Pushing `vX.Y.Z` cross-builds
+the matrix and attaches per-arch `.ipk` artifacts plus `SHA256SUMS` to a
+GitHub Release. The tag base must match `[package].version` in `Cargo.toml`
+(single source of truth, enforced by CI). Full procedure:
+[`docs/release.md`](./docs/release.md).
+
+`opkg upgrade` and `opkg install --force-reinstall` preserve the user's
+`/etc/hotspot-banner/theme/` directory — the package never ships into it.
+`/etc/config/hotspot-fas` is a declared conffile, so UCI edits also survive.
+
 ## Notes
 
 - Modern HTTPS traffic cannot be transparently redirected without certificate errors.

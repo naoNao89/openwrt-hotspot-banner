@@ -9,7 +9,7 @@ REMOTE_HOST := $(ROUTER_USER)@$(ROUTER_IP)
 REMOTE_PATH := /usr/bin/hotspot-fas
 BUILD_DIR := target/$(TARGET)/release
 
-.PHONY: all build clean install-target deploy run ci ci-docker
+.PHONY: all build clean install-target deploy deploy-package-test ipk ipk-all run ci ci-docker
 
 all: build
 
@@ -26,6 +26,8 @@ ci:
 	cargo clippy --all-targets -- -D warnings
 	cargo test --locked
 	./scripts/check-shell.sh
+	./tests/teardown-mock.sh
+	./tests/regression-guest-iface-and-dhcp.sh
 
 ci-docker:
 	docker build -f Dockerfile.ci -t openwrt-hotspot-banner-ci .
@@ -35,6 +37,15 @@ clean:
 
 deploy: build
 	./deploy.sh
+
+deploy-package-test: build
+	./scripts/deploy-package-test.sh
+
+ipk: build
+	SKIP_BUILD=1 ./scripts/build-ipk.sh
+
+ipk-all:
+	./scripts/build-ipk-all.sh
 
 run:
 	cargo run

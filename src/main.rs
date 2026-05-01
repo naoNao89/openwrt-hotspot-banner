@@ -1,5 +1,6 @@
 use std::env;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use tokio::time::interval;
@@ -9,6 +10,7 @@ mod firewall;
 mod handlers;
 mod pages;
 mod state;
+mod theme;
 
 use state::AppState;
 
@@ -42,6 +44,12 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(30usize);
     let guest_iface = env::var("GUEST_IFACE").unwrap_or_else(|_| "ath01".to_string());
+    let theme_dir = env::var("THEME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/etc/hotspot-banner/theme"));
+    let default_theme_dir = env::var("DEFAULT_THEME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/usr/share/hotspot-banner/default-theme"));
 
     let state = AppState::new(
         Duration::from_secs(session_minutes * 60),
@@ -49,6 +57,8 @@ async fn main() {
         Duration::from_secs(queue_retry_seconds),
         max_active_sessions,
         guest_iface,
+        theme_dir,
+        default_theme_dir,
     );
 
     info!("Running in standalone mode (iptables-based captive portal)");

@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# Entware sysvinit-style script for hotspot-fas.
+# Targets Padavan-NG / Asus-Merlin and any Entware-on-router host.
+#
+
+PROG=/opt/bin/hotspot-fas
+PIDFILE=/opt/var/run/hotspot-fas.pid
+LOGFILE=/opt/var/log/hotspot-fas.log
+ENV_FILE=/opt/etc/hotspot-fas.conf
+
+mkdir -p /opt/var/run /opt/var/log
+
+load_env() {
+    PORT=8080
+    SESSION_MINUTES=60
+    DISCONNECT_GRACE_SECONDS=300
+    QUEUE_RETRY_SECONDS=300
+    MAX_ACTIVE_SESSIONS=30
+    GUEST_IFACE=br0
+    THEME_DIR=/opt/etc/hotspot-banner/theme
+    DEFAULT_THEME_DIR=/opt/share/hotspot-banner/default-theme
+
+    if [ -f "$ENV_FILE" ]; then
+        # shellcheck disable=SC1090
+        . "$ENV_FILE"
+    fi
+}
+
+start() {
+    load_env
+    if [ ! -x "$PROG" ]; then
+        echo "Missing $PROG"
+        exit 1
+    fi
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+        echo "hotspot-fas already running"
+        return 0
+    fi
+    PORT="$PORT" \
+    SESSION_MINUTES="$SESSION_MINUTES" \
+    DISCONNECT_GRACE_SECONDS="$DISCONNECT_GRACE_SECONDS" \
+    QUEUE_RETRY_SECONDS="$QUEUE_RETRY_SECONDS" \
+    MAX_ACTIVE_SESSIONS="$MAX_ACTIVE_SESSIONS" \
+    GUEST_IFACE="$GUEST_IFACE" \
+    THEME_DIR="$THEME_DIR" \
+    DEFAULT_THEME_DIR="$DEFAULT_THEME_DIR" \
+        nohup "$PROG" >>"$LOGFILE" 2>&1 &
+    echo $! >"$PIDFILE"
+    echo "Started hotspot-fas (pid $(cat "$PIDFILE"))"
+}
+
+stop() {
+    if [ -f "$PIDFILE" ]; then
+        kill "$(cat "$PIDFILE")" 2>/dev/null || true
+        rm -f "$PIDFILE"
+        echo "Stopped hotspot-fas"
+    fi
+}
+
+case "$1" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; sleep 1; start ;;
+    status)
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+            echo "hotspot-fas running (pid $(cat "$PIDFILE"))"
+        else
+            echo "hotspot-fas not running"
+            exit 1
+        fi
+        ;;
+    *) echo "Usage: $0 {start|stop|restart|status}"; exit 1 ;;
+esac

@@ -8,6 +8,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY scripts ./scripts
 COPY openwrt-config ./openwrt-config
+COPY openwrt-package ./openwrt-package
+COPY packaging ./packaging
+COPY themes ./themes
+COPY tests ./tests
 COPY Makefile README.md ./
 
 RUN make ci

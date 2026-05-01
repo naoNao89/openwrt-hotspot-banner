@@ -1,0 +1,63 @@
+[
+  {
+    "id": "arm_cortex-a7_neon-vfpv4",
+    "rust_target": "armv7-unknown-linux-musleabihf",
+    "opkg_arch": "arm_cortex-a7_neon-vfpv4",
+    "linker_env": "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER",
+    "linker": "arm-linux-gnueabihf-gcc",
+    "apt_packages": "gcc-arm-linux-gnueabihf",
+    "profile": "openwrt",
+    "notes": "ipq40xx/ipq50xx (CMCC RAX3000QY/Nwrt, Linksys WRT1900AC, etc.)"
+  },
+  {
+    "id": "aarch64_cortex-a53",
+    "rust_target": "aarch64-unknown-linux-musl",
+    "opkg_arch": "aarch64_cortex-a53",
+    "linker_env": "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER",
+    "linker": "aarch64-linux-gnu-gcc",
+    "apt_packages": "gcc-aarch64-linux-gnu",
+    "profile": "openwrt",
+    "notes": "Xiaomi AX3600/AX9000 (ipq807x), iStoreOS aarch64, RPi4 (OpenWrt)"
+  },
+  {
+    "id": "aarch64_generic",
+    "rust_target": "aarch64-unknown-linux-musl",
+    "opkg_arch": "aarch64_generic",
+    "linker_env": "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER",
+    "linker": "aarch64-linux-gnu-gcc",
+    "apt_packages": "gcc-aarch64-linux-gnu",
+    "profile": "openwrt",
+    "notes": "MediaTek Filogic mt7986/mt7988 (Xiaomi AX3000T/BE3600, Cudy WR3000)"
+  },
+  {
+    "id": "x86_64",
+    "rust_target": "x86_64-unknown-linux-musl",
+    "opkg_arch": "x86_64",
+    "linker_env": "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER",
+    "linker": "x86_64-linux-gnu-gcc",
+    "apt_packages": "musl-tools",
+    "profile": "openwrt",
+    "notes": "x86_64 OpenWrt (mini PCs, VMs, iStoreOS x86)"
+  },
+  {
+    "id": "mipsel_24kc",
+    "rust_target": "mipsel-unknown-linux-musl",
+    "opkg_arch": "mipsel_24kc",
+    "linker_env": "CARGO_TARGET_MIPSEL_UNKNOWN_LINUX_MUSL_LINKER",
+    "linker": "mipsel-linux-gnu-gcc",
+    "apt_packages": "gcc-mipsel-linux-gnu",
+    "profile": "openwrt",
+    "ci_skip": true,
+    "notes": "Lean LEDE / older mt76xx (Newifi D2, Xiaomi Mi-R3G). Tier-3 in stable rustup; build with nightly + `-Z build-std`. Skipped in CI by default."
+  },
+  {
+    "id": "entware-aarch64",
+    "rust_target": "aarch64-unknown-linux-musl",
+    "opkg_arch": "aarch64-3.10",
+    "linker_env": "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER",
+    "linker": "aarch64-linux-gnu-gcc",
+    "apt_packages": "gcc-aarch64-linux-gnu",
+    "profile": "entware",
+    "notes": "Padavan-NG / Asus-Merlin / any router with Entware (/opt prefix, sysvinit)"
+  }
+]

@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/*
+ * Theme authors: add custom CSS here. Tailwind utilities used in
+ * src/*.html are automatically included by the Tailwind CLI scan.
+ *
+ * Tip: keep this minimal — captive portals load before the user
+ * has internet, so every byte counts.
+ */

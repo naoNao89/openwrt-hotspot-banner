@@ -195,11 +195,11 @@ $SSH_BASE 'command -v uci; command -v ip; command -v logger; command -v wget'
 group_end
 
 $SSH_BASE 'rm -rf /tmp/hotspot-ci && mkdir -p /tmp/hotspot-ci'
-$SCP_BASE -r deploy.sh openwrt-config scripts root@127.0.0.1:/tmp/hotspot-ci/
+$SCP_BASE -r deploy.sh openwrt-config openwrt-package scripts root@127.0.0.1:/tmp/hotspot-ci/
 $SCP_BASE "$APP_BINARY_PATH" root@127.0.0.1:/tmp/hotspot-ci/hotspot-fas
-$SSH_BASE 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harden-router-services.sh && ash -n openwrt-config/hotspot-firewall.sh && ash -n openwrt-config/iptables-captive.sh && ash -n openwrt-config/setup-router.sh && ash -n openwrt-config/uci-guest-setup.sh && ash -n scripts/check-shell.sh && ash -n scripts/test-router.sh && ash -n scripts/live-queue-e2e.sh && ash -n scripts/qemu-openwrt-smoke.sh && RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh'
+$SSH_BASE 'cd /tmp/hotspot-ci && ash -n deploy.sh && ash -n openwrt-config/harden-router-services.sh && ash -n openwrt-config/hotspot-firewall.sh && ash -n openwrt-config/iptables-captive.sh && ash -n openwrt-config/setup-router.sh && ash -n openwrt-config/uci-guest-setup.sh && ash -n openwrt-package/openwrt-hotspot-banner/files/etc/init.d/hotspot-fas && ash -n openwrt-package/openwrt-hotspot-banner/files/etc/hotplug.d/iface/99-hotspot-guest && ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/hotspot-firewall.sh && ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/setup-router.sh && ash -n openwrt-package/openwrt-hotspot-banner/files/usr/lib/hotspot-banner/uci-guest-setup.sh && ash -n scripts/check-shell.sh && ash -n scripts/deploy-package-test.sh && ash -n scripts/test-router.sh && ash -n scripts/live-queue-e2e.sh && ash -n scripts/qemu-openwrt-smoke.sh && RUN_LIVE_QUEUE_E2E=0 ash scripts/live-queue-e2e.sh'
 $SSH_BASE 'chmod +x /tmp/hotspot-ci/hotspot-fas'
-$SSH_BASE 'PORT=8080 SESSION_MINUTES=1 DISCONNECT_GRACE_SECONDS=1 QUEUE_RETRY_SECONDS=1 MAX_ACTIVE_SESSIONS=30 GUEST_IFACE=br-lan /tmp/hotspot-ci/hotspot-fas >/tmp/hotspot-ci/hotspot-fas.log 2>&1 & echo $! >/tmp/hotspot-ci/hotspot-fas.pid'
+$SSH_BASE 'PORT=8080 SESSION_MINUTES=1 DISCONNECT_GRACE_SECONDS=1 QUEUE_RETRY_SECONDS=1 MAX_ACTIVE_SESSIONS=30 GUEST_IFACE=br-lan THEME_DIR=/tmp/hotspot-ci/openwrt-package/openwrt-hotspot-banner/files/etc/hotspot-banner/theme DEFAULT_THEME_DIR=/tmp/hotspot-ci/openwrt-package/openwrt-hotspot-banner/files/usr/share/hotspot-banner/default-theme /tmp/hotspot-ci/hotspot-fas >/tmp/hotspot-ci/hotspot-fas.log 2>&1 & echo $! >/tmp/hotspot-ci/hotspot-fas.pid'
 $SSH_BASE 'for i in 1 2 3 4 5 6 7 8 9 10; do test "$(wget -T 3 -qO- http://127.0.0.1:8080/health 2>/dev/null)" = ok && exit 0; sleep 1; done; cat /tmp/hotspot-ci/hotspot-fas.log; exit 1'
 {
     echo "profile_memory_mb=$QEMU_MEMORY_MB"

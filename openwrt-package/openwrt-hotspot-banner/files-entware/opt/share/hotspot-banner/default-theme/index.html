@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}} - Free WiFi</title>
+    <link rel="stylesheet" href="/theme/style.css">
+</head>
+<body>
+    <main class="card">
+        <div class="wifi-icon">📶</div>
+        <h1>{{title}}</h1>
+        <p class="subtitle">One tap required to start internet</p>
+        <section class="banner">
+            <h2>Welcome to FreeWiFi</h2>
+            <p>Please view this message, then tap the button below to unlock free internet access.</p>
+        </section>
+        <section class="notice">Closing this page will keep WiFi connected, but internet will stay paused until you tap Connect.</section>
+        <form method="GET" action="{{accept_url}}">
+            <button type="submit">Connect & Start Internet</button>
+        </form>
+        <p class="terms">Active sessions: {{active_sessions}} / {{max_active_sessions}}</p>
+    </main>
+</body>
+</html>
