@@ -52,7 +52,13 @@ start_service() {
 		done
 		# Fully detach stdio so the parent (procd, ssh, init.d caller)
 		# doesn't wait on the watcher's pipes when invoked over SSH.
-		GUEST_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" \
+		# IMPORTANT: pass the wifi vif as GUEST_WIFI_IFACE, not GUEST_IFACE.
+		# hotspot-firewall.sh + uci-guest-teardown.sh treat GUEST_IFACE as the
+		# *bridge* (br-guest) and GUEST_WIFI_IFACE as the wifi vif (ath01).
+		# Conflating them attaches CAPTIVE_* rules to -i ath01, which:
+		#   1. teardown can't remove (it deletes -i br-guest), and
+		#   2. breaks DNS/HTTP REDIRECT because dnsmasq only binds br-guest.
+		GUEST_WIFI_IFACE="$guest_iface" GUEST_IP="$guest_ip" FAS_PORT="$port" \
 			/usr/lib/hotspot-banner/guest-watcher.sh </dev/null >/dev/null 2>&1 &
 	fi
 

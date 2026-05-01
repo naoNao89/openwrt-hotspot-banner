@@ -40,7 +40,12 @@
 
 set -u
 
-GUEST_IFACE="${GUEST_IFACE:-ath01}"
+# Naming: GUEST_WIFI_IFACE is the wifi vif (e.g. ath01); GUEST_IFACE is the
+# bridge (br-guest), per hotspot-firewall.sh + uci-guest-teardown.sh. Accept
+# the legacy GUEST_IFACE env for back-compat (older init scripts set it to
+# the wifi vif), but never propagate it to firewall.sh — see apply_once.
+GUEST_WIFI_IFACE="${GUEST_WIFI_IFACE:-${GUEST_IFACE:-ath01}}"
+GUEST_IFACE="$GUEST_WIFI_IFACE"
 GUEST_IP="${GUEST_IP:-192.168.28.1}"
 FAS_PORT="${FAS_PORT:-8080}"
 DEADLINE="${GUEST_WATCH_DEADLINE_SECONDS:-600}"
@@ -59,7 +64,10 @@ apply_once() {
     ip addr add "${GUEST_IP}/24" dev br-guest 2>/dev/null || true
     ip link set "$GUEST_IFACE" master br-guest 2>/dev/null || true
     ip link set "$GUEST_IFACE" up 2>/dev/null || true
-    GUEST_WIFI_IFACE="$GUEST_IFACE" GUEST_IP="$GUEST_IP" FAS_PORT="$FAS_PORT" \
+    # Force GUEST_IFACE=br-guest for the firewall script: rules must attach to
+    # the bridge, not the wifi vif (which is GUEST_WIFI_IFACE). The watcher
+    # itself has GUEST_IFACE set to the wifi vif, so we explicitly override.
+    GUEST_IFACE=br-guest GUEST_WIFI_IFACE="$GUEST_WIFI_IFACE" GUEST_IP="$GUEST_IP" FAS_PORT="$FAS_PORT" \
         sh /usr/lib/hotspot-banner/hotspot-firewall.sh >/dev/null 2>&1 || true
 }
 

@@ -24,6 +24,10 @@ GUEST_SSID="${GUEST_SSID:-FreeWiFi}"
 GUEST_IP="${GUEST_IP:-192.168.28.1}"
 GUEST_NET="${GUEST_NET:-192.168.28.0/24}"
 GUEST_IFACE="${GUEST_IFACE:-br-guest}"
+# Older versions of hotspot-fas (<0.1.1) attached CAPTIVE_* rules to the wifi
+# vif (ath01) instead of the bridge due to a GUEST_IFACE/GUEST_WIFI_IFACE
+# naming collision. Clean both so upgrades-in-place don't strand rules.
+GUEST_WIFI_IFACE="${GUEST_WIFI_IFACE:-ath01}"
 KEEP_UCI="${KEEP_UCI:-0}"
 
 UCI="${UCI_BIN:-uci}"
@@ -38,19 +42,23 @@ log() { echo "teardown: $*"; }
 # 1. iptables ---------------------------------------------------------------
 log "removing iptables rules"
 
-# nat PREROUTING jump from guest interface
-$IPT -t nat -D PREROUTING -i "$GUEST_IFACE" -j CAPTIVE_REDIRECT 2>/dev/null || true
+# nat PREROUTING jump from guest interface (clean both bridge + legacy wifi-vif rules)
+for iface in "$GUEST_IFACE" "$GUEST_WIFI_IFACE"; do
+    while $IPT -t nat -D PREROUTING -i "$iface" -j CAPTIVE_REDIRECT 2>/dev/null; do :; done
+done
 
 # nat POSTROUTING masquerade for guest subnet
-$IPT -t nat -D POSTROUTING -s "$GUEST_NET" -j MASQUERADE 2>/dev/null || true
+while $IPT -t nat -D POSTROUTING -s "$GUEST_NET" -j MASQUERADE 2>/dev/null; do :; done
 
 # filter FORWARD/INPUT jumps from guest iface (idempotent: try a few common patterns)
-for chain in FORWARD INPUT; do
-    while $IPT -D "$chain" -i "$GUEST_IFACE" -j CAPTIVE_INPUT 2>/dev/null; do :; done
-    while $IPT -D "$chain" -i "$GUEST_IFACE" -j CAPTIVE_EASTWEST 2>/dev/null; do :; done
-    while $IPT -D "$chain" -i "$GUEST_IFACE" -j CAPTIVE_EGRESS_GUARD 2>/dev/null; do :; done
-    while $IPT -D "$chain" -i "$GUEST_IFACE" -j CAPTIVE_AUTH 2>/dev/null; do :; done
-    while $IPT -D "$chain" -i "$GUEST_IFACE" -j CAPTIVE_BLOCK 2>/dev/null; do :; done
+for iface in "$GUEST_IFACE" "$GUEST_WIFI_IFACE"; do
+    for chain in FORWARD INPUT; do
+        while $IPT -D "$chain" -i "$iface" -j CAPTIVE_INPUT 2>/dev/null; do :; done
+        while $IPT -D "$chain" -i "$iface" -j CAPTIVE_EASTWEST 2>/dev/null; do :; done
+        while $IPT -D "$chain" -i "$iface" -j CAPTIVE_EGRESS_GUARD 2>/dev/null; do :; done
+        while $IPT -D "$chain" -i "$iface" -j CAPTIVE_AUTH 2>/dev/null; do :; done
+        while $IPT -D "$chain" -i "$iface" -j CAPTIVE_BLOCK 2>/dev/null; do :; done
+    done
 done
 
 # Flush + delete user chains (must be empty before -X).
